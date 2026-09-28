@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import pickle
 import threading
 
@@ -22,11 +23,12 @@ from trl.rewards import (
     get_cosine_scaled_reward,
     get_repetition_penalty_reward,
     get_soft_overlong_punishment,
+    json_schema_reward,
     reasoning_accuracy_reward,
     think_format_reward,
 )
 
-from .testing_utils import TrlTestCase, require_math_latex
+from .testing_utils import TrlTestCase, require_jsonschema, require_math_latex
 
 
 class TestThinkFormatReward(TrlTestCase):
@@ -397,3 +399,59 @@ class TestCosineScaledReward:
         completion_ids = [[1] * 50]
         assert unpickled(completions, solution, completion_ids) == [pytest.approx(0.75)]
         assert unpickled.__name__ == "cosine_scaled_reward"
+
+
+@require_jsonschema
+class TestJsonSchemaReward:
+    schema = {
+        "type": "object",
+        "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
+        "required": ["name", "age"],
+    }
+
+    def test_valid_json(self):
+        completions = [[{"content": '{"name": "Ada", "age": 36}'}]]
+        assert json_schema_reward(completions, schema=[self.schema]) == [1.0]
+
+    def test_valid_json_in_code_block(self):
+        completions = [
+            [{"content": '```json\n{"name": "Ada", "age": 36}\n```'}],  # Code block with language tag
+            [{"content": '```\n{"name": "Ada", "age": 36}\n```'}],  # Code block without language tag
+        ]
+        assert json_schema_reward(completions, schema=[self.schema] * 2) == [1.0, 1.0]
+
+    def test_json_not_matching_schema(self):
+        completions = [
+            [{"content": '{"name": "Ada"}'}],  # Missing required field
+            [{"content": '{"name": "Ada", "age": "36"}'}],  # Wrong type
+        ]
+        assert json_schema_reward(completions, schema=[self.schema] * 2) == [0.0, 0.0]
+
+    def test_invalid_json(self):
+        completions = [
+            [{"content": '{"name": "Ada", "age": 36'}],  # Truncated JSON
+            [{"content": 'Sure! {"name": "Ada", "age": 36}'}],  # Text around the JSON
+        ]
+        assert json_schema_reward(completions, schema=[self.schema] * 2) == [0.0, 0.0]
+
+    def test_schema_as_json_string(self):
+        completions = [[{"content": '{"name": "Ada", "age": 36}'}]]
+        assert json_schema_reward(completions, schema=[json.dumps(self.schema)]) == [1.0]
+
+    def test_missing_schema_yields_none(self):
+        completions = [[{"content": '{"name": "Ada", "age": 36}'}], [{"content": '{"name": "Ada", "age": 36}'}]]
+        assert json_schema_reward(completions, schema=[None, self.schema]) == [None, 1.0]
+
+    def test_log_extra(self):
+        logged = {}
+        completions = [
+            [{"content": '{"name": "Ada", "age": 36}'}],
+            [{"content": '{"name": "Ada"}'}],
+            [{"content": '{"name": "Ada", "age": 36'}],
+        ]
+        json_schema_reward(
+            completions, schema=[self.schema] * 3, log_extra=lambda column, values: logged.update({column: values})
+        )
+        assert logged == {
+            "json_schema_error": ["", "'age' is a required property", "invalid JSON: Expecting ',' delimiter"]
+        }

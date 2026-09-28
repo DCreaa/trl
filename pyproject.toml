@@ -51,6 +51,9 @@ deepspeed = [
 harbor = [
     "harbor>=0.13.0; python_version >= '3.12'",  # harbor requires Python 3.12+ (pulls its sandbox backends)
 ]
+jsonschema = [
+    "jsonschema>=4.0.0",
+]
 kernels = [  # transformers renamed the "hub-kernels" extra to "kernels" in 5.1.0
     "transformers[kernels]",  # transformers >= 5.1.0
     "transformers[hub-kernels]",  # transformers < 5.1.0
