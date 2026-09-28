@@ -18,6 +18,10 @@ This module contains some useful reward functions, primarily intended for use wi
 
 [[autodoc]] rewards.think_format_reward
 
+## json_schema_reward
+
+[[autodoc]] rewards.json_schema_reward
+
 ## get_repetition_penalty_reward
 
 [[autodoc]] rewards.get_repetition_penalty_reward
